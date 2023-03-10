@@ -1,20 +1,20 @@
 provider "aws" {
   shared_credentials_file = "~/.aws/credentials"
-  region = "us-east-2"
+  region = "ca-central-1"
 }
 
 resource "aws_instance" "exit-node" {
-  ami           = "ami-0f65671a86f061fcd"
-  instance_type = "t2.micro"
+  ami           = "ami-09e2c09f31b90da99"
+  instance_type = "t2.nano"
   key_name      = "proxycannon"
   vpc_security_group_ids = ["${aws_security_group.exit-node-sec-group.id}"]
   subnet_id	= "${var.subnet_id}"
   # we need to disable this for internal routing
   source_dest_check	= false
-  count		= "${var.count}"
+  count		= "${var.nodeCount}"
 
 
-  tags {
+  tags = {
     Name = "exit-node"
   }
 
@@ -26,6 +26,7 @@ resource "aws_instance" "exit-node" {
     connection {
       type     = "ssh"
       user     = "ubuntu"
+      host = self.public_ip
       private_key = "${file("${var.aws_priv_key}")}"
     }
   }
@@ -37,6 +38,7 @@ resource "aws_instance" "exit-node" {
     connection {
       type     = "ssh"
       user     = "ubuntu"
+      host = self.public_ip
       private_key = "${file("${var.aws_priv_key}")}"
     }
   }
@@ -48,7 +50,7 @@ resource "aws_instance" "exit-node" {
 
   # modify our route table when we destroy an exit-node
   provisioner "local-exec" {
-    when = "destroy"
+    when = destroy
     command = "sudo ./del_route.bash ${self.private_ip}"
   }
 
