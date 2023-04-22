@@ -11,11 +11,12 @@ apt -y upgrade
 apt -y install unzip git openvpn easy-rsa
 
 # install terraform
-#wget https://releases.hashicorp.com/terraform/0.11.10/terraform_0.11.10_linux_amd64.zip
-#unzip terraform_0.11.10_linux_amd64.zip
-#cp terraform /usr/bin/
-#rm -f terraform_0.11.10_linux_amd64.zip
-#rm -rf terraform
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update -y
+sudo apt-get install terraform -y
 
 # create directory for our aws credentials
 mkdir ~/.aws
@@ -31,20 +32,27 @@ cp configs/proxycannon-client.conf ~/proxycannon-client.conf
 
 # setup ca and certs
 mkdir /etc/openvpn/ccd
+#clean up old setup
+rm -rf /etc/openvpn/easy-rsa
+#create new easy-rsa folder and init pki
 make-cadir /etc/openvpn/easy-rsa
 cd /etc/openvpn/easy-rsa/
-ln -s openssl-1.0.0.cnf openssl.cnf
-mkdir keys
-. /etc/openvpn/easy-rsa/vars
-./clean-all
-/etc/openvpn/easy-rsa/pkitool --initca
-/etc/openvpn/easy-rsa/pkitool --server server
-/usr/bin/openssl dhparam -out /etc/openvpn/easy-rsa/keys/dh2048.pem 2048
-openvpn --genkey --secret /etc/openvpn/easy-rsa/keys/ta.key
-
-# generate certs
-for x in $(seq -f "%02g" 1 10);do /etc/openvpn/easy-rsa/pkitool client$x;done
-/etc/openvpn/easy-rsa/pkitool node01
+/etc/openvpn/easy-rsa/easyrsa init-pki #initial public-private key infra
+openssl rand -out /etc/openvpn/easy-rsa/pki/.rnd -hex 256 #fix .rnd cannot be loaded
+#set openssl config
+echo "set_var EASYRSA_SSL_CONF       \"/etc/openvpn/easy-rsa/openssl-easyrsa.cnf\"" >> /etc/openvpn/easy-rsa/vars
+echo "set_var EASYRSA_REQ_CN=proxycannon-server" >> /etc/openvpn/easy-rsa/vars #set common name
+echo "set_var EASYRSA_BATCH       \"yes\"" >> /etc/openvpn/easy-rsa/vars #stop build-ca asking for common name
+#build ca
+/etc/openvpn/easy-rsa/easyrsa build-ca nopass
+#generate Diffie-hellman param
+cd /etc/openvpn/easy-rsa/
+./easyrsa gen-dh
+#generate secret hmac
+openvpn --genkey --secret /etc/openvpn/easy-rsa/pki/ta.key
+#generate cert
+./easyrsa build-server-full server nopass
+./easyrsa build-client-full client01 nopass
 
 # start services
 systemctl start openvpn@node-server.service
@@ -60,6 +68,7 @@ sed -i "s/REMOTE_PUB_IP/$EIP/" ~/proxycannon-client.conf
 # setup routing and forwarding
 sysctl -w net.ipv4.ip_forward=1
 
+#equal cost multipath load sharing, flow-based (not per packet)
 # use L4 (src ip, src dport, dest ip, dport) hashing for load balancing instead of L3 (src ip ,dst ip)
 #echo 1 > /proc/sys/net/ipv4/fib_multipath_hash_policy
 sysctl -w net.ipv4.fib_multipath_hash_policy=1
@@ -76,10 +85,16 @@ iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 ############################
 # post install instructions
 ############################
-
-echo "Copy /etc/openvpn/easy-rsa/keys/ta.key, /etc/openvpn/easy-rsa/keys/ca.crt, /etc/openvpn/easy-rsa/keys/client01.crt, /etc/openvpn/easy-rsa/keys/client01.key, and ~/proxycannon-client.conf to your workstation."
-
-echo "####################### OpenVPN client config [proxycannon-client.conf] ################################"
+echo "Copy the client files at /home/ubuntu/client-files to your workstation" 
+cp /etc/openvpn/easy-rsa/pki/ta.key /home/ubuntu/client-files/ta.key
+cp /etc/openvpn/easy-rsa/pki/ca.crt /home/ubuntu/client-files/ca.crt
+cp /etc/openvpn/easy-rsa/pki/issued/client01.crt /home/ubuntu/client-files/client01.crt
+cp /etc/openvpn/easy-rsa/pki/private/client01.key /home/ubuntu/client-files/client01.key
+cp ~/proxycannon-client.conf /home/ubuntu/client-files/proxycannon-client.conf
+chmod -R 0755 /home/ubuntu/client-files/* #facilitate download process
+echo "client files:"
+ls -la /home/ubuntu/client-files/
+echo "Client config file"
 cat ~/proxycannon-client.conf
 
 echo "####################### Be sure to add your AWS API keys and SSH keys to the following locations ###################"
