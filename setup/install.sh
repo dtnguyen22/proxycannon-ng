@@ -76,9 +76,13 @@ iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 ############################
 # post install instructions
 ############################
-
-echo "Copy /etc/openvpn/easy-rsa/keys/ta.key, /etc/openvpn/easy-rsa/keys/ca.crt, /etc/openvpn/easy-rsa/keys/client01.crt, /etc/openvpn/easy-rsa/keys/client01.key, and ~/proxycannon-client.conf to your workstation."
-
+mkdir /home/ubuntu/client-files/ /home/ubuntu/client-files/
+cp /etc/openvpn/easy-rsa/keys/ta.key /home/ubuntu/client-files/
+cp /etc/openvpn/easy-rsa/keys/ca.crt /home/ubuntu/client-files/
+cp /etc/openvpn/easy-rsa/keys/client01.crt /home/ubuntu/client-files/
+cp /etc/openvpn/easy-rsa/keys/client01.key /home/ubuntu/client-files/
+cp ~/proxycannon-client.conf /home/ubuntu/client-files/
+echo "Copy files in /home/ubuntu/cient-files to the client"
 echo "####################### OpenVPN client config [proxycannon-client.conf] ################################"
 cat ~/proxycannon-client.conf
 
