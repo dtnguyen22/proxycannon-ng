@@ -1,0 +1,1 @@
+after restarting the server, the ip rule table may be flushed, run terraform destroy, then apply so the scripts will run the ip rules command again.

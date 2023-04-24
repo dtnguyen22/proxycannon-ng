@@ -4,7 +4,7 @@ variable "aws_priv_key" {
 
 # number of exit-node instances to launch
 variable "nodeCount" {
-  default = 2
+  default = 5
 }
 
 # launch all exit nodes in the same subnet id
